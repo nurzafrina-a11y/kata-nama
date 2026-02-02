@@ -1,0 +1,912 @@
+<!doctype html>
+<html lang="ms" class="h-full">
+ <head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Permainan Kata Nama - Condongan Kepala</title><!-- Muatkan Tailwind CSS untuk gaya -->
+  <script src="https://cdn.tailwindcss.com"></script><!-- Muatkan perpustakaan MediaPipe untuk pengesanan wajah -->
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js" crossorigin="anonymous"></script><!-- Muatkan Elements SDK untuk integrasi Canva -->
+  <script src="/_sdk/element_sdk.js"></script>
+  <style>
+        body {
+            box-sizing: border-box;
+        }
+        
+        /* Animasi confetti untuk perayaan */
+        @keyframes confetti-fall {
+            0% { 
+                transform: translateY(-100%) rotate(0deg); 
+                opacity: 1; 
+            }
+            100% { 
+                transform: translateY(100vh) rotate(720deg); 
+                opacity: 0; 
+            }
+        }
+        
+        .confetti {
+            position: fixed;
+            width: 12px;
+            height: 12px;
+            background-color: #ffd700;
+            animation: confetti-fall 2.5s ease-out forwards;
+            pointer-events: none;
+        }
+        
+        /* Animasi denyutan untuk maklum balas */
+        @keyframes pulse-scale {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.08); }
+        }
+        
+        .pulse-animation {
+            animation: pulse-scale 0.6s ease-in-out;
+        }
+        
+        /* Animasi petunjuk condongan */
+        @keyframes tilt-left {
+            0%, 100% { transform: rotate(0deg) translateX(0); }
+            50% { transform: rotate(-20deg) translateX(-10px); }
+        }
+        
+        @keyframes tilt-right {
+            0%, 100% { transform: rotate(0deg) translateX(0); }
+            50% { transform: rotate(20deg) translateX(10px); }
+        }
+        
+        .tilt-left-hint {
+            animation: tilt-left 1.2s ease-in-out infinite;
+        }
+        
+        .tilt-right-hint {
+            animation: tilt-right 1.2s ease-in-out infinite;
+        }
+        
+        /* Gaya bekas video */
+        .video-container {
+            position: relative;
+            border-radius: 1.5rem;
+            overflow: hidden;
+            box-shadow: 0 15px 50px rgba(0,0,0,0.4);
+            background-color: #111;
+        }
+        
+        /* Penunjuk arah condongan */
+        .direction-indicator {
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            padding: 1rem 1.25rem;
+            border-radius: 0.75rem;
+            font-weight: 800;
+            font-size: 1rem;
+            opacity: 0.7;
+            transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+            text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+        }
+        
+        .direction-indicator.active {
+            transform: translateY(-50%) scale(1.2);
+            opacity: 1;
+            box-shadow: 0 0 20px rgba(255,255,255,0.5);
+        }
+        
+        /* Gaya meter condongan */
+        .tilt-meter-fill {
+            transition: all 0.15s ease-out;
+            border-radius: 9999px;
+            box-shadow: 0 0 10px rgba(59, 130, 246, 0.5);
+        }
+        
+        /* Animasi pemuatan */
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .animate-spin-slow {
+            animation: spin 2s linear infinite;
+        }
+    </style>
+  <style>@view-transition { navigation: auto; }</style>
+  <script src="/_sdk/data_sdk.js" type="text/javascript"></script>
+ </head>
+ <body class="h-full bg-gradient-to-br from-orange-500 via-pink-500 to-purple-600 overflow-auto"><!-- Bekas Permainan Utama -->
+  <div id="app-container" class="w-full h-full flex flex-col items-center justify-center p-4"><!-- ==================== SKRIN PERMULAAN ==================== -->
+   <div id="start-screen" class="text-center max-w-2xl w-full"><!-- Tajuk Permainan -->
+    <h1 id="main-title" class="text-5xl md:text-6xl font-black text-white mb-4 drop-shadow-lg animate-bounce">🎮 KATA NAMA</h1>
+    <p class="text-xl text-white/90 mb-8 drop-shadow-md font-semibold">Permainan Pembelajaran Interaktif dengan Condongan Kepala</p><!-- Arahan Permainan -->
+    <div class="bg-white/95 backdrop-blur-sm rounded-3xl p-8 mb-8 shadow-2xl border-4 border-yellow-300">
+     <h2 class="text-3xl font-black text-purple-700 mb-6">📖 Cara Bermain</h2>
+     <div class="space-y-4 text-left"><!-- Arahan Condong Kiri -->
+      <div class="flex items-center gap-4 p-4 bg-gradient-to-r from-blue-50 to-cyan-50 rounded-2xl border-3 border-blue-300"><span class="text-5xl flex-shrink-0">⬅️</span>
+       <div>
+        <p class="text-lg font-black text-blue-700">CONDONG KIRI untuk <span id="left-type" class="text-purple-600">KATA NAMA AM</span></p>
+        <p class="text-sm text-gray-600 mt-1">(Nama biasa - seperti: kucing, lobak, kanak-kanak)</p>
+       </div>
+      </div><!-- Arahan Condong Kanan -->
+      <div class="flex items-center gap-4 p-4 bg-gradient-to-r from-red-50 to-orange-50 rounded-2xl border-3 border-red-300"><span class="text-5xl flex-shrink-0">➡️</span>
+       <div>
+        <p class="text-lg font-black text-red-700">CONDONG KANAN untuk <span id="right-type" class="text-purple-600">KATA NAMA KHAS</span></p>
+        <p class="text-sm text-gray-600 mt-1">(Nama khas - seperti: Sang Kancil, Pak Ali, Malaysia)</p>
+       </div>
+      </div>
+     </div><!-- Pemberitahuan Kamera -->
+     <div class="mt-6 p-4 bg-gradient-to-r from-yellow-100 to-orange-100 rounded-2xl border-3 border-yellow-400">
+      <p class="text-base font-bold text-yellow-800">📸 <strong>Kamera Diperlukan:</strong> Kami memerlukan kamera anda untuk melihat condongan kepala anda. Tiada foto disimpan!</p>
+     </div>
+    </div><!-- Butang Mula --> <button id="start-btn" class="bg-gradient-to-r from-green-400 to-emerald-500 text-white text-2xl font-black py-5 px-12 rounded-full shadow-2xl hover:shadow-3xl transform hover:scale-110 transition-all duration-300 active:scale-95 border-4 border-green-600"> 🚀 MULA BERMAIN! </button> <!-- Nota Sokongan -->
+    <p class="text-white/80 text-sm mt-6 drop-shadow-md">💡 Petua: Pastikan pencahayaan yang baik dan cukup ruang di hadapan kamera!</p>
+   </div><!-- ==================== SKRIN PERMAINAN ==================== -->
+   <div id="game-screen" class="hidden w-full max-w-5xl"><!-- Paparan Skor -->
+    <div class="flex justify-between items-center mb-6 gap-4">
+     <div class="bg-white/95 backdrop-blur-sm rounded-2xl px-6 py-3 shadow-lg border-3 border-green-400">
+      <p class="text-sm text-gray-600 font-bold">Skor Anda</p>
+      <p class="text-3xl font-black text-green-600"><span id="score">0</span>/<span id="total">10</span></p>
+     </div>
+     <div class="bg-white/95 backdrop-blur-sm rounded-2xl px-6 py-3 shadow-lg border-3 border-blue-400 flex-1 text-center">
+      <p class="text-sm text-gray-600 font-bold">Perkataan</p>
+      <p class="text-2xl font-black text-blue-600"><span id="word-counter">1</span>/<span id="total-words">10</span></p>
+     </div>
+     <div class="bg-white/95 backdrop-blur-sm rounded-2xl px-6 py-3 shadow-lg border-3 border-purple-400 text-center">
+      <p class="text-sm text-gray-600 font-bold">Peratus</p>
+      <p class="text-2xl font-black text-purple-600"><span id="percentage">0</span>%</p>
+     </div>
+    </div><!-- Paparan Perkataan Semasa -->
+    <div id="word-display" class="bg-white/98 backdrop-blur-sm rounded-3xl p-8 mb-6 text-center shadow-2xl border-4 border-yellow-300">
+     <p class="text-gray-500 text-lg mb-3 font-bold">Apakah jenis nama perkataan ini?</p>
+     <h2 id="current-word" class="text-6xl md:text-7xl font-black text-gray-800 mb-4 drop-shadow-md">Memuatkan...</h2>
+     <p id="word-emoji" class="text-7xl animate-bounce">📝</p>
+    </div><!-- Kawasan Video dan Pengesanan -->
+    <div class="relative"><!-- Label Arah -->
+     <div class="flex justify-between mb-3 gap-3">
+      <div id="left-label" class="flex-1 bg-gradient-to-r from-blue-500 to-cyan-500 text-white px-4 py-3 rounded-2xl font-black text-center tilt-left-hint border-3 border-blue-700 shadow-lg">
+       ⬅️ KATA NAMA AM 
+       <p class="text-xs opacity-90 font-bold">(Nama Biasa)</p>
+      </div>
+      <div id="right-label" class="flex-1 bg-gradient-to-r from-red-500 to-orange-500 text-white px-4 py-3 rounded-2xl font-black text-center tilt-right-hint border-3 border-red-700 shadow-lg">
+       KATA NAMA KHAS ➡️ 
+       <p class="text-xs opacity-90 font-bold">(Nama Khas)</p>
+      </div>
+     </div><!-- Bekas Video -->
+     <div class="video-container bg-gray-900 border-4 border-gray-800">
+      <video id="video" class="w-full rounded-2xl transform scale-x-[-1]" playsinline></video><!-- Overlay Penunjuk Condongan -->
+      <div id="tilt-indicator" class="absolute inset-0 flex items-center justify-center pointer-events-none">
+       <div id="tilt-arrow" class="text-9xl opacity-0 transition-all duration-300 drop-shadow-xl" style="text-shadow: 0 4px 8px rgba(0,0,0,0.5);">
+       </div>
+      </div><!-- Penunjuk Sisi -->
+      <div id="left-side-indicator" class="direction-indicator left-3 bg-blue-600/90 text-white font-black text-3xl">
+       ⬅️
+      </div>
+      <div id="right-side-indicator" class="direction-indicator right-3 bg-red-600/90 text-white font-black text-3xl">
+       ➡️
+      </div>
+     </div><!-- Meter Condongan -->
+     <div class="mt-4 bg-white/95 rounded-full p-3 shadow-lg border-3 border-gray-300">
+      <div class="flex items-center gap-3"><span class="text-blue-700 font-black text-lg">⬅️</span>
+       <div class="flex-1 h-6 bg-gray-300 rounded-full relative overflow-hidden border-2 border-gray-400"><!-- Pengisi meter condongan -->
+        <div id="tilt-meter" class="absolute top-0 bottom-0 w-2 tilt-meter-fill" style="left: 50%; background: linear-gradient(to bottom, #3b82f6, #1e40af);"></div><!-- Garis pusat -->
+        <div class="absolute top-0 bottom-0 left-1/2 w-1 bg-gray-600 transform -translate-x-1/2"></div><!-- Penanda ambang -->
+        <div class="absolute top-1/2 left-1/4 w-1 h-full bg-blue-400 opacity-50 transform -translate-y-1/2"></div>
+        <div class="absolute top-1/2 right-1/4 w-1 h-full bg-red-400 opacity-50 transform -translate-y-1/2"></div>
+       </div><span class="text-red-700 font-black text-lg">➡️</span>
+      </div>
+      <p id="tilt-status" class="text-center text-sm font-bold text-gray-600 mt-2">👀 Sila lihat kamera untuk memulakan</p>
+     </div>
+    </div><!-- Kawasan Maklum Balas -->
+    <div id="feedback-area" class="mt-6 hidden">
+     <div id="feedback-box" class="rounded-3xl p-8 text-center shadow-2xl transition-all duration-300 border-4">
+      <p id="feedback-emoji" class="text-8xl mb-3 animate-bounce">🎉</p>
+      <h3 id="feedback-text" class="text-3xl font-black mb-3">Betul!</h3>
+      <p id="feedback-explanation" class="text-lg font-semibold text-gray-700 leading-relaxed"></p>
+     </div>
+    </div><!-- Butang Seterusnya --> <button id="next-btn" class="hidden mt-6 w-full bg-gradient-to-r from-blue-500 to-purple-600 text-white text-2xl font-black py-4 rounded-2xl shadow-xl hover:shadow-2xl transform hover:scale-105 transition-all duration-300 active:scale-95 border-4 border-purple-700"> Seterusnya ➡️ </button>
+   </div><!-- ==================== SKRIN TAMAT ==================== -->
+   <div id="end-screen" class="hidden text-center max-w-2xl w-full">
+    <div class="bg-white/98 backdrop-blur-sm rounded-3xl p-10 shadow-2xl border-4 border-yellow-300">
+     <h2 class="text-5xl font-black text-purple-700 mb-6 animate-bounce">🎊 TAHNIAH! 🎊</h2>
+     <div id="final-score-display" class="text-7xl font-black text-green-600 mb-6 drop-shadow-lg">
+      10/10
+     </div>
+     <p id="performance-message" class="text-2xl font-bold text-gray-700 mb-8 leading-relaxed">Anda adalah Ahli Kata Nama!</p>
+     <div class="space-y-4"><button id="play-again-btn" class="w-full bg-gradient-to-r from-green-400 to-emerald-500 text-white text-2xl font-black py-5 rounded-2xl shadow-xl hover:shadow-2xl transform hover:scale-105 transition-all duration-300 active:scale-95 border-4 border-green-600"> 🔄 Bermain Lagi </button> <button id="back-to-start-btn" class="w-full bg-gradient-to-r from-gray-400 to-gray-500 text-white text-xl font-bold py-4 rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 active:scale-95 border-4 border-gray-600"> 🏠 Kembali ke Permulaan </button>
+     </div>
+    </div>
+   </div><!-- ==================== SKRIN MEMUATKAN ==================== -->
+   <div id="loading-screen" class="hidden fixed inset-0 bg-black/80 flex items-center justify-center z-50">
+    <div class="bg-white/98 rounded-3xl p-10 text-center max-w-sm mx-4 shadow-2xl border-4 border-blue-500">
+     <div class="text-8xl mb-4 animate-spin-slow">
+      📸
+     </div>
+     <h3 class="text-2xl font-black text-gray-800 mb-3">Menyediakan Kamera...</h3>
+     <p class="text-gray-700 font-semibold mb-4">Sila benarkan akses kamera apabila diminta!</p>
+     <div class="w-full bg-gray-300 rounded-full h-3 border-2 border-gray-400 overflow-hidden">
+      <div class="bg-gradient-to-r from-blue-500 to-purple-500 h-3 rounded-full animate-pulse" style="width: 70%"></div>
+     </div>
+    </div>
+   </div><!-- ==================== SKRIN RALAT ==================== -->
+   <div id="error-screen" class="hidden fixed inset-0 bg-black/80 flex items-center justify-center z-50">
+    <div class="bg-white/98 rounded-3xl p-10 text-center max-w-sm mx-4 shadow-2xl border-4 border-red-500">
+     <div class="text-8xl mb-4">
+      😕
+     </div>
+     <h3 class="text-2xl font-black text-red-600 mb-3">Kamera Tidak Tersedia</h3>
+     <p class="text-gray-700 font-semibold mb-6">Sila benarkan akses kamera untuk bermain permainan ini. Semak tetapan pelayar anda dan cuba semula.</p><button id="retry-camera-btn" class="bg-gradient-to-r from-blue-500 to-purple-600 text-white font-black py-4 px-8 rounded-xl shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-300 border-3 border-purple-700"> 🔄 Cuba Semula </button>
+    </div>
+   </div>
+  </div><!-- Bekas Confetti -->
+  <div id="confetti-container" class="fixed inset-0 pointer-events-none overflow-hidden z-40"></div>
+  <script>
+        // ==================== KONFIGURASI ====================
+        
+        // Konfigurasi lalai untuk permainan
+        const defaultConfig = {
+            game_title: "🎮 KATA NAMA",
+            left_label: "KATA NAMA AM",
+            right_label: "KATA NAMA KHAS",
+            correct_message: "Betul! Bagus sekali! 🎉",
+            try_again_message: "Cuba Lagi! 🤔",
+            background_color: "#f97316",
+            text_color: "#1f2937",
+            primary_action_color: "#22c55e",
+            secondary_action_color: "#3b82f6",
+            surface_color: "#ffffff"
+        };
+        
+        // Konfigurasi semasa (akan dikemas kini oleh SDK)
+        let config = { ...defaultConfig };
+        
+        // ==================== PANGKALAN DATA PERKATAAN ====================
+        // Setiap perkataan mempunyai: teks, jenis (am/khas), emoji, penjelasan
+        const wordDatabase = [
+            {
+                text: "Sang Kancil",
+                type: "khas",
+                emoji: "🦌",
+                explanation: "'Sang Kancil' ialah KATA NAMA KHAS kerana ia nama khas tokoh dalam cerita rakyat Melayu yang terkenal!"
+            },
+            {
+                text: "kucing",
+                type: "am",
+                emoji: "🐱",
+                explanation: "'Kucing' ialah KATA NAMA AM kerana ia merujuk kepada apa-apa kucing secara umum, bukan kucing tertentu."
+            },
+            {
+                text: "kanak-kanak",
+                type: "am",
+                emoji: "👧",
+                explanation: "'Kanak-kanak' ialah KATA NAMA AM kerana ia merujuk kepada semua kanak-kanak secara umum."
+            },
+            {
+                text: "guru",
+                type: "am",
+                emoji: "👩‍🏫",
+                explanation: "'Guru' ialah KATA NAMA AM kerana ia merujuk kepada apa-apa guru, bukan guru tertentu."
+            },
+            {
+                text: "Pak Ali",
+                type: "khas",
+                emoji: "👨",
+                explanation: "'Pak Ali' ialah KATA NAMA KHAS kerana ia nama khas seseorang!"
+            },
+            {
+                text: "Malaysia",
+                type: "khas",
+                emoji: "🇲🇾",
+                explanation: "'Malaysia' ialah KATA NAMA KHAS kerana ia nama khas negara kita!"
+            },
+            {
+                text: "sekolah",
+                type: "am",
+                emoji: "🏫",
+                explanation: "'Sekolah' ialah KATA NAMA AM kerana ia merujuk kepada apa-apa sekolah secara umum."
+            },
+            {
+                text: "Kuala Lumpur",
+                type: "khas",
+                emoji: "🏙️",
+                explanation: "'Kuala Lumpur' ialah KATA NAMA KHAS kerana ia nama khas ibu negara kita!"
+            },
+            {
+                text: "lobak merah",
+                type: "am",
+                emoji: "🥕",
+                explanation: "'Lobak merah' ialah KATA NAMA AM kerana ia merujuk kepada apa-apa lobak merah secara umum."
+            },
+            {
+                text: "Sang Merak",
+                type: "khas",
+                emoji: "🦚",
+                explanation: "'Sang Merak' ialah KATA NAMA KHAS kerana ia nama khas tokoh dalam cerita tradisional!"
+            },
+            {
+                text: "buku",
+                type: "am",
+                emoji: "📚",
+                explanation: "'Buku' ialah KATA NAMA AM kerana ia merujuk kepada apa-apa buku secara umum."
+            },
+            {
+                text: "Cikgu Aminah",
+                type: "khas",
+                emoji: "👩‍🏫",
+                explanation: "'Cikgu Aminah' ialah KATA NAMA KHAS kerana ia nama khas guru tertentu!"
+            },
+            {
+                text: "burung",
+                type: "am",
+                emoji: "🐦",
+                explanation: "'Burung' ialah KATA NAMA AM kerana ia merujuk kepada apa-apa burung secara umum."
+            },
+            {
+                text: "kereta",
+                type: "am",
+                emoji: "🚗",
+                explanation: "'Kereta' ialah KATA NAMA AM kerana ia merujuk kepada apa-apa kereta secara umum."
+            },
+            {
+                text: "Hang Tuah",
+                type: "khas",
+                emoji: "⚔️",
+                explanation: "'Hang Tuah' ialah KATA NAMA KHAS kerana ia nama khas pahlawan legendaris Melayu yang terkenal!"
+            }
+        ];
+        
+        // ==================== KEADAAN PERMAINAN ====================
+        let gameState = {
+            currentWordIndex: 0,
+            score: 0,
+            totalAnswered: 0,
+            shuffledWords: [],
+            isAnswering: false,
+            hasAnswered: false,
+            tiltAngle: 0,
+            faceMesh: null,
+            camera: null,
+            isInitialized: false
+        };
+        
+        // Tetapan pengesanan condongan
+        const TILT_THRESHOLD = 18; // Darjah diperlukan untuk mendaftar condongan
+        const TILT_HOLD_TIME = 600; // Milisaat untuk menahan condongan
+        let tiltStartTime = null;
+        let currentTiltDirection = null;
+        
+        // ==================== ELEMEN DOM ====================
+        const elements = {
+            startScreen: document.getElementById('start-screen'),
+            gameScreen: document.getElementById('game-screen'),
+            endScreen: document.getElementById('end-screen'),
+            loadingScreen: document.getElementById('loading-screen'),
+            errorScreen: document.getElementById('error-screen'),
+            startBtn: document.getElementById('start-btn'),
+            nextBtn: document.getElementById('next-btn'),
+            playAgainBtn: document.getElementById('play-again-btn'),
+            backToStartBtn: document.getElementById('back-to-start-btn'),
+            retryCameraBtn: document.getElementById('retry-camera-btn'),
+            video: document.getElementById('video'),
+            currentWord: document.getElementById('current-word'),
+            wordEmoji: document.getElementById('word-emoji'),
+            score: document.getElementById('score'),
+            total: document.getElementById('total'),
+            percentage: document.getElementById('percentage'),
+            wordCounter: document.getElementById('word-counter'),
+            totalWords: document.getElementById('total-words'),
+            feedbackArea: document.getElementById('feedback-area'),
+            feedbackBox: document.getElementById('feedback-box'),
+            feedbackEmoji: document.getElementById('feedback-emoji'),
+            feedbackText: document.getElementById('feedback-text'),
+            feedbackExplanation: document.getElementById('feedback-explanation'),
+            tiltMeter: document.getElementById('tilt-meter'),
+            tiltStatus: document.getElementById('tilt-status'),
+            tiltArrow: document.getElementById('tilt-arrow'),
+            leftSideIndicator: document.getElementById('left-side-indicator'),
+            rightSideIndicator: document.getElementById('right-side-indicator'),
+            finalScoreDisplay: document.getElementById('final-score-display'),
+            performanceMessage: document.getElementById('performance-message'),
+            confettiContainer: document.getElementById('confetti-container'),
+            mainTitle: document.getElementById('main-title'),
+            leftLabel: document.getElementById('left-label'),
+            rightLabel: document.getElementById('right-label'),
+            leftType: document.getElementById('left-type'),
+            rightType: document.getElementById('right-type')
+        };
+        
+        // ==================== FUNGSI PEMBANTU ====================
+        
+        /**
+         * Mengacak tatasusunan menggunakan algoritma Fisher-Yates
+         * Ini memastikan perkataan muncul dalam susunan rawak setiap permainan
+         */
+        function shuffleArray(array) {
+            const shuffled = [...array];
+            for (let i = shuffled.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+            }
+            return shuffled;
+        }
+        
+        /**
+         * Mencipta kesan perayaan confetti
+         */
+        function createConfetti() {
+            const colors = ['#FFD700', '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7'];
+            
+            for (let i = 0; i < 60; i++) {
+                setTimeout(() => {
+                    const confetti = document.createElement('div');
+                    confetti.className = 'confetti';
+                    confetti.style.left = Math.random() * 100 + '%';
+                    confetti.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
+                    confetti.style.animationDuration = (Math.random() * 2.5 + 1.5) + 's';
+                    confetti.style.width = (Math.random() * 10 + 8) + 'px';
+                    confetti.style.height = confetti.style.width;
+                    elements.confettiContainer.appendChild(confetti);
+                    
+                    // Buang confetti selepas animasi
+                    setTimeout(() => confetti.remove(), 4000);
+                }, i * 20);
+            }
+        }
+        
+        /**
+         * Mengira sudut condongan kepala dari tanda aras wajah
+         * Menggunakan garis dari dahi (titik 10) ke dagu (titik 152)
+         * Mengembalikan sudut dalam darjah: negatif = condongan kiri, positif = condongan kanan
+         */
+        function calculateTiltAngle(landmarks) {
+            // Titik tanda aras utama untuk pengesanan condongan kepala
+            // Titik 10: Bahagian atas dahi
+            // Titik 152: Bahagian bawah dagu
+            const forehead = landmarks[10];
+            const chin = landmarks[152];
+            
+            // Kira sudut garis wajah menegak
+            const deltaX = chin.x - forehead.x;
+            const deltaY = chin.y - forehead.y;
+            
+            // Tukar kepada darjah
+            // atan2 mengembalikan radian, kami menukar kepada darjah
+            const angle = Math.atan2(deltaX, deltaY) * (180 / Math.PI);
+            
+            return angle;
+        }
+        
+        /**
+         * Mengemaskini meter condongan visual berdasarkan sudut semasa
+         */
+        function updateTiltMeter(angle) {
+            // Peta sudut (-45 hingga 45 darjah) kepada kedudukan (0% hingga 100%)
+            const position = 50 + (angle / 50) * 50;
+            const clampedPosition = Math.max(0, Math.min(100, position));
+            
+            elements.tiltMeter.style.left = `calc(${clampedPosition}% - 4px)`;
+            
+            // Kemaskini warna meter berdasarkan condongan
+            if (angle < -TILT_THRESHOLD) {
+                elements.tiltMeter.style.background = 'linear-gradient(to bottom, #3b82f6, #1e40af)';
+            } else if (angle > TILT_THRESHOLD) {
+                elements.tiltMeter.style.background = 'linear-gradient(to bottom, #ef4444, #991b1b)';
+            } else {
+                elements.tiltMeter.style.background = 'linear-gradient(to bottom, #8b5cf6, #6d28d9)';
+            }
+        }
+        
+        /**
+         * Mengemaskini penunjuk arah condongan
+         */
+        function updateTiltIndicators(angle) {
+            // Tetap semula penunjuk
+            elements.leftSideIndicator.classList.remove('active');
+            elements.rightSideIndicator.classList.remove('active');
+            elements.tiltArrow.style.opacity = '0';
+            
+            if (gameState.hasAnswered) {
+                elements.tiltStatus.textContent = '✅ Klik "Seterusnya" untuk meneruskan';
+                return;
+            }
+            
+            if (angle < -TILT_THRESHOLD) {
+                // Condongan kiri
+                elements.leftSideIndicator.classList.add('active');
+                elements.tiltArrow.textContent = '⬅️';
+                elements.tiltArrow.style.opacity = '0.9';
+                elements.tiltArrow.style.transform = 'translateX(-60px) scale(1.2)';
+                
+                const holdProgress = tiltStartTime ? ((Date.now() - tiltStartTime) / TILT_HOLD_TIME * 100) : 0;
+                const progressPercent = Math.min(100, Math.round(holdProgress));
+                elements.tiltStatus.innerHTML = `⬅️ Condongan KIRI... Pegang! <strong>${progressPercent}%</strong>`;
+                
+            } else if (angle > TILT_THRESHOLD) {
+                // Condongan kanan
+                elements.rightSideIndicator.classList.add('active');
+                elements.tiltArrow.textContent = '➡️';
+                elements.tiltArrow.style.opacity = '0.9';
+                elements.tiltArrow.style.transform = 'translateX(60px) scale(1.2)';
+                
+                const holdProgress = tiltStartTime ? ((Date.now() - tiltStartTime) / TILT_HOLD_TIME * 100) : 0;
+                const progressPercent = Math.min(100, Math.round(holdProgress));
+                elements.tiltStatus.innerHTML = `Condongan KANAN... Pegang! <strong>${progressPercent}%</strong> ➡️`;
+                
+            } else {
+                elements.tiltArrow.style.transform = 'translateX(0) scale(1)';
+                elements.tiltStatus.innerHTML = '👀 Condongkan kepala anda KE KIRI atau KE KANAN untuk jawab!';
+            }
+        }
+        
+        /**
+         * Memproses hasil pengesanan wajah
+         * Dipanggil setiap bingkai oleh MediaPipe
+         */
+        function onFaceResults(results) {
+            if (!results.multiFaceLandmarks || results.multiFaceLandmarks.length === 0) {
+                elements.tiltStatus.textContent = '👀 Sila lihat kamera';
+                return;
+            }
+            
+            // Dapatkan tanda aras dari wajah yang pertama dikesan
+            const landmarks = results.multiFaceLandmarks[0];
+            
+            // Kira dan simpan sudut condongan semasa
+            gameState.tiltAngle = calculateTiltAngle(landmarks);
+            
+            // Kemaskini penunjuk visual
+            updateTiltMeter(gameState.tiltAngle);
+            updateTiltIndicators(gameState.tiltAngle);
+            
+            // Proses condongan untuk pengesanan jawapan
+            if (!gameState.hasAnswered && !gameState.isAnswering) {
+                processTiltForAnswer(gameState.tiltAngle);
+            }
+        }
+        
+        /**
+         * Memproses sudut condongan untuk mengesan jawapan
+         * Memerlukan menahan condongan untuk TILT_HOLD_TIME milisaat
+         */
+        function processTiltForAnswer(angle) {
+            let detectedDirection = null;
+            
+            if (angle < -TILT_THRESHOLD) {
+                detectedDirection = 'left';
+            } else if (angle > TILT_THRESHOLD) {
+                detectedDirection = 'right';
+            }
+            
+            if (detectedDirection) {
+                if (currentTiltDirection === detectedDirection) {
+                    // Arah yang sama - semak jika ditahan cukup lama
+                    if (tiltStartTime && Date.now() - tiltStartTime >= TILT_HOLD_TIME) {
+                        // Jawapan dikesan!
+                        registerAnswer(detectedDirection);
+                    }
+                } else {
+                    // Arah baru - mula masa
+                    currentTiltDirection = detectedDirection;
+                    tiltStartTime = Date.now();
+                }
+            } else {
+                // Tiada condongan yang ketara - tetap semula
+                currentTiltDirection = null;
+                tiltStartTime = null;
+            }
+        }
+        
+        /**
+         * Mendaftarkan jawapan pemain
+         */
+        function registerAnswer(direction) {
+            if (gameState.hasAnswered || gameState.isAnswering) return;
+            
+            gameState.isAnswering = true;
+            gameState.hasAnswered = true;
+            currentTiltDirection = null;
+            tiltStartTime = null;
+            
+            const currentWord = gameState.shuffledWords[gameState.currentWordIndex];
+            
+            // Tentukan jika jawapan betul
+            // Condongan KIRI = am (nama biasa)
+            // Condongan KANAN = khas (nama khas)
+            const playerAnswer = direction === 'left' ? 'am' : 'khas';
+            const isCorrect = playerAnswer === currentWord.type;
+            
+            // Kemaskini skor
+            gameState.totalAnswered++;
+            if (isCorrect) {
+                gameState.score++;
+            }
+            
+            // Tunjukkan maklum balas
+            showFeedback(isCorrect, currentWord);
+            
+            // Kemaskini paparan skor
+            elements.score.textContent = gameState.score;
+            elements.total.textContent = gameState.totalAnswered;
+            
+            const percent = Math.round((gameState.score / gameState.totalAnswered) * 100);
+            elements.percentage.textContent = percent;
+            
+            gameState.isAnswering = false;
+        }
+        
+        /**
+         * Menunjukkan maklum balas selepas jawapan
+         */
+        function showFeedback(isCorrect, word) {
+            elements.feedbackArea.classList.remove('hidden');
+            elements.feedbackBox.classList.add('pulse-animation');
+            
+            if (isCorrect) {
+                elements.feedbackBox.className = 'rounded-3xl p-8 text-center shadow-2xl bg-gradient-to-br from-green-100 to-emerald-100 transition-all duration-300 border-4 border-green-500';
+                elements.feedbackEmoji.textContent = '🎉';
+                elements.feedbackText.textContent = config.correct_message || defaultConfig.correct_message;
+                elements.feedbackText.className = 'text-3xl font-black mb-3 text-green-700';
+                createConfetti();
+            } else {
+                elements.feedbackBox.className = 'rounded-3xl p-8 text-center shadow-2xl bg-gradient-to-br from-orange-100 to-yellow-100 transition-all duration-300 border-4 border-orange-500';
+                elements.feedbackEmoji.textContent = '🤔';
+                elements.feedbackText.textContent = config.try_again_message || defaultConfig.try_again_message;
+                elements.feedbackText.className = 'text-3xl font-black mb-3 text-orange-700';
+            }
+            
+            elements.feedbackExplanation.textContent = word.explanation;
+            elements.feedbackExplanation.className = 'text-lg font-semibold text-gray-700 leading-relaxed';
+            
+            // Tunjukkan butang seterusnya
+            elements.nextBtn.classList.remove('hidden');
+            
+            // Buang kelas animasi selepas animasi selesai
+            setTimeout(() => {
+                elements.feedbackBox.classList.remove('pulse-animation');
+            }, 600);
+        }
+        
+        /**
+         * Memuatkan perkataan seterusnya
+         */
+        function nextWord() {
+            gameState.currentWordIndex++;
+            
+            // Semak jika permainan selesai
+            if (gameState.currentWordIndex >= gameState.shuffledWords.length) {
+                endGame();
+                return;
+            }
+            
+            // Tetap semula keadaan untuk perkataan baru
+            gameState.hasAnswered = false;
+            currentTiltDirection = null;
+            tiltStartTime = null;
+            
+            // Sembunyikan maklum balas
+            elements.feedbackArea.classList.add('hidden');
+            elements.nextBtn.classList.add('hidden');
+            
+            // Paparkan perkataan baru
+            displayCurrentWord();
+        }
+        
+        /**
+         * Memaparkan perkataan semasa
+         */
+        function displayCurrentWord() {
+            const word = gameState.shuffledWords[gameState.currentWordIndex];
+            elements.currentWord.textContent = word.text;
+            elements.wordEmoji.textContent = word.emoji;
+            elements.wordCounter.textContent = gameState.currentWordIndex + 1;
+        }
+        
+        /**
+         * Memulakan MediaPipe Face Mesh
+         */
+        async function initFaceMesh() {
+            return new Promise((resolve, reject) => {
+                try {
+                    // Cipta contoh Face Mesh
+                    gameState.faceMesh = new FaceMesh({
+                        locateFile: (file) => {
+                            return `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`;
+                        }
+                    });
+                    
+                    // Konfigurasi Face Mesh
+                    gameState.faceMesh.setOptions({
+                        maxNumFaces: 1,
+                        refineLandmarks: true,
+                        minDetectionConfidence: 0.5,
+                        minTrackingConfidence: 0.5
+                    });
+                    
+                    // Tetapkan panggilan balik hasil
+                    gameState.faceMesh.onResults(onFaceResults);
+                    
+                    resolve();
+                } catch (error) {
+                    reject(error);
+                }
+            });
+        }
+        
+        /**
+         * Memulakan kamera dan mula pengesanan wajah
+         */
+        async function startCamera() {
+            try {
+                elements.loadingScreen.classList.remove('hidden');
+                
+                // Mulai Face Mesh
+                await initFaceMesh();
+                
+                // Cipta contoh kamera
+                gameState.camera = new Camera(elements.video, {
+                    onFrame: async () => {
+                        if (gameState.faceMesh) {
+                            await gameState.faceMesh.send({ image: elements.video });
+                        }
+                    },
+                    width: 640,
+                    height: 480
+                });
+                
+                // Mulai kamera
+                await gameState.camera.start();
+                
+                gameState.isInitialized = true;
+                elements.loadingScreen.classList.add('hidden');
+                
+            } catch (error) {
+                console.error('Gagal memulakan kamera:', error);
+                elements.loadingScreen.classList.add('hidden');
+                elements.errorScreen.classList.remove('hidden');
+            }
+        }
+        
+        /**
+         * Memulai permainan baru
+         */
+        async function startGame() {
+            // Acak perkataan untuk sesi permainan ini
+            gameState.shuffledWords = shuffleArray(wordDatabase).slice(0, 10);
+            gameState.currentWordIndex = 0;
+            gameState.score = 0;
+            gameState.totalAnswered = 0;
+            gameState.hasAnswered = false;
+            
+            // Kemaskini UI
+            elements.totalWords.textContent = gameState.shuffledWords.length;
+            elements.score.textContent = '0';
+            elements.total.textContent = '0';
+            elements.percentage.textContent = '0';
+            
+            // Sembunyikan skrin permulaan, tunjukkan skrin permainan
+            elements.startScreen.classList.add('hidden');
+            elements.endScreen.classList.add('hidden');
+            elements.gameScreen.classList.remove('hidden');
+            
+            // Mulai kamera jika belum berjalan
+            if (!gameState.isInitialized) {
+                await startCamera();
+            }
+            
+            // Paparkan perkataan pertama
+            displayCurrentWord();
+        }
+        
+        /**
+         * Mengakhiri permainan dan menunjukkan keputusan
+         */
+        function endGame() {
+            // Sembunyikan skrin permainan, tunjukkan skrin tamat
+            elements.gameScreen.classList.add('hidden');
+            elements.endScreen.classList.remove('hidden');
+            
+            // Paparkan skor akhir
+            elements.finalScoreDisplay.textContent = `${gameState.score}/${gameState.shuffledWords.length}`;
+            
+            // Jana mesej prestasi
+            const percentage = (gameState.score / gameState.shuffledWords.length) * 100;
+            let message;
+            
+            if (percentage === 100) {
+                message = "🌟 Skor Sempurna! Anda Ahli Kata Nama! 🌟";
+                createConfetti();
+                createConfetti();
+            } else if (percentage >= 80) {
+                message = "🎉 Cemerlang! Anda memahami kata nama dengan baik!";
+                createConfetti();
+            } else if (percentage >= 60) {
+                message = "👍 Bagus! Teruskan berlatih!";
+            } else if (percentage >= 40) {
+                message = "💪 Percubaan yang baik! Latihan membuat sempurna!";
+            } else {
+                message = "📚 Teruskan belajar! Anda akan menjadi lebih baik!";
+            }
+            
+            elements.performanceMessage.textContent = message;
+        }
+        
+        /**
+         * Tetap semula permainan ke skrin permulaan
+         */
+        function resetToStart() {
+            elements.endScreen.classList.add('hidden');
+            elements.gameScreen.classList.add('hidden');
+            elements.startScreen.classList.remove('hidden');
+            elements.feedbackArea.classList.add('hidden');
+            elements.nextBtn.classList.add('hidden');
+        }
+        
+        // ==================== FUNGSI KEMASKINI UI ====================
+        
+        /**
+         * Mengemaskini UI berdasarkan perubahan konfigurasi
+         */
+        async function onConfigChange(newConfig) {
+            // Kemaskini tajuk
+            const gameTitle = newConfig.game_title || defaultConfig.game_title;
+            elements.mainTitle.textContent = gameTitle;
+            
+            // Kemaskini label kiri
+            const leftLabel = newConfig.left_label || defaultConfig.left_label;
+            elements.leftType.textContent = leftLabel;
+            const leftLabelEl = document.getElementById('left-label');
+            if (leftLabelEl) {
+                leftLabelEl.innerHTML = `⬅️ ${leftLabel}<p class="text-xs opacity-90 font-bold">(Nama Biasa)</p>`;
+            }
+            
+            // Kemaskini label kanan
+            const rightLabel = newConfig.right_label || defaultConfig.right_label;
+            elements.rightType.textContent = rightLabel;
+            const rightLabelEl = document.getElementById('right-label');
+            if (rightLabelEl) {
+                rightLabelEl.innerHTML = `${rightLabel} ➡️<p class="text-xs opacity-90 font-bold">(Nama Khas)</p>`;
+            }
+        }
+        
+        // ==================== PENDENGAR ACARA ====================
+        
+        elements.startBtn.addEventListener('click', startGame);
+        elements.nextBtn.addEventListener('click', nextWord);
+        elements.playAgainBtn.addEventListener('click', startGame);
+        elements.backToStartBtn.addEventListener('click', resetToStart);
+        elements.retryCameraBtn.addEventListener('click', () => {
+            elements.errorScreen.classList.add('hidden');
+            startCamera();
+        });
+        
+        // ==================== PEMULAAN SDK ====================
+        
+        // Mulai Elements SDK
+        if (window.elementSdk) {
+            window.elementSdk.init({
+                defaultConfig: defaultConfig,
+                
+                onConfigChange: async (newConfig) => {
+                    config = { ...newConfig };
+                    await onConfigChange(config);
+                },
+                
+                mapToCapabilities: (cfg) => ({
+                    recolorables: [],
+                    borderables: [],
+                    fontEditable: undefined,
+                    fontSizeable: undefined
+                }),
+                
+                mapToEditPanelValues: (cfg) => new Map([
+                    ['game_title', cfg.game_title || defaultConfig.game_title],
+                    ['left_label', cfg.left_label || defaultConfig.left_label],
+                    ['right_label', cfg.right_label || defaultConfig.right_label],
+                    ['correct_message', cfg.correct_message || defaultConfig.correct_message],
+                    ['try_again_message', cfg.try_again_message || defaultConfig.try_again_message]
+                ])
+            });
+        }
+        
+        // Gunakan konfigurasi awal
+        onConfigChange(config);
+    </script>
+ <script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'9c7a7eafa413c0c2',t:'MTc3MDA0Mzc2My4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+</html>
